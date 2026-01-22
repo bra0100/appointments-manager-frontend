@@ -1,79 +1,87 @@
 <script>
-    import { 
-        cancelAppointment, 
-        attendAppointment, 
-        rescheduleAppointment,
-    } 
-    from '../../services/api.js';
-    import { ref } from 'vue';
+    import { useAppointments } from '../../composables/useAppointments.js';
+    import { useFocusTrap } from '../../composables/useFocusTrap.js';
+    import { ref, nextTick } from 'vue';
     import { APPOINTMENT_STATUS } from '../../constants';
+    import { formatDate, formatTime } from '../../utils/formatters';
 
     export default {
         props: {
             appointment: Object,
             serviceName: String
         },
-        emits: ['refresh'],
+        emits: ['cancel', 'attend', 'reschedule'],
 
         setup(props, { emit }) {
+            const appointmentsComposable = useAppointments();
+
             const showModal = ref(false);
             const date = ref('');
             const time = ref('');
             const error = ref('');
-
             
-            function openModal() {
-                error.value = null;
-                date.value = props.appointment.date;
-                time.value = props.appointment.time;
-                showModal.value = true;
-            }
-
             function closeModal() {
                 showModal.value = false;
-            }
-
-            function formatDate(date) {
-                return new Date(date).toLocaleDateString(undefined, {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric'
-                });
-            }
-
-            function formatTime(time) {
-                const [hours, minutes] = time.split(':');
-                const hour = parseInt(hours);
-                const period = hour >= 12 ? 'PM' : 'AM';
-                const displayHour = hour % 12 || 12;
-                return `${displayHour}:${minutes} ${period}`;
-            }
-
-            async function cancel() {
-                await cancelAppointment(props.appointment.id);
-                emit('refresh');
-            }
-            async function attend() {
-                await attendAppointment(props.appointment.id);
-                emit('refresh');
+                deactivateFocusTrap();
             }
 
             async function reschedule() {
                 try {
                     error.value = null;
 
-                    await rescheduleAppointment(props.appointment.id, {
+                    await appointmentsComposable.reschedule(props.appointment.id, {
                         date: date.value,
                         time: time.value
                     });
 
                     showModal.value = false;
-                    emit('refresh');
+                    emit('reschedule');
                 } catch (err) {
                     error.value = err.message;
                 }
+            }
 
+            const { 
+                containerRef: modalRef, 
+                firstFocusableRef: dateInputRef,
+                activateFocusTrap,
+                deactivateFocusTrap 
+            } = useFocusTrap({
+                onEscape: closeModal,
+                onEnter: (event, activeElement) => {
+                    if (activeElement.tagName === 'INPUT') {
+                        reschedule();
+                    }
+                }
+            });
+            
+            function openModal() {
+                error.value = null;
+                date.value = props.appointment.date;
+                time.value = props.appointment.time;
+                showModal.value = true;
 
+                nextTick(() => {
+                    activateFocusTrap();
+                });
+            }
+
+            async function cancel() {
+                try {
+                    await appointmentsComposable.cancel(props.appointment.id);
+                    emit('cancel');
+                } catch (err) {
+                    console.error(err);
+                }
+            }
+
+            async function attend() {
+                try {
+                    await appointmentsComposable.attend(props.appointment.id);
+                    emit('attend');
+                } catch (err) {
+                    console.error(err);
+                }
             }
 
             return { 
@@ -88,7 +96,9 @@
                 error, 
                 openModal, 
                 closeModal,
-                APPOINTMENT_STATUS 
+                APPOINTMENT_STATUS,
+                dateInputRef,
+                modalRef,
             };  
         }
     }
@@ -145,7 +155,7 @@
             <button
                 v-if="appointment.status === APPOINTMENT_STATUS.PENDING"
                 class="btn btn-reschedule"
-                @click="openModal"
+                @click="openModal($event)"
                 aria-label="Reschedule appointment"
             >
                 Reschedule
@@ -163,9 +173,19 @@
     </article>
 
     <Transition name="modal">
-        <div v-if="showModal" class="modal">
-            <div class="modal-content">
-                <h3>Reschedule Appointment</h3>
+        <div 
+            v-if="showModal" 
+            class="modal"
+        >
+            <div 
+                ref="modalRef"
+                class="modal-content"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="reschedule-title"
+                tabindex="-1"
+            >
+                <h3 id="reschedule-title">Reschedule Appointment</h3>
 
                 <p class="service-label">{{ serviceName }}</p>
 
@@ -177,7 +197,11 @@
                 <div class="datetime-group">
                     <label>
                         New date
-                        <input type="date" v-model="date"/>
+                        <input
+                        ref="dateInputRef" 
+                        type="date" 
+                        v-model="date"
+                        />
                     </label>
 
                     <label>
@@ -188,7 +212,7 @@
 
                 <p v-if="error" class="error">{{ error }}</p>
 
-                <div class="modal-actions">
+                <div class="modal-action">
                     <button class="btn btn-primary" @click="reschedule">
                         Save changes
                     </button>
@@ -200,4 +224,3 @@
         </div>
     </Transition>
 </template>
-

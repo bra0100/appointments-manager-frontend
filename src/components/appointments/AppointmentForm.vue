@@ -1,41 +1,30 @@
 <script>
-import { ref, onMounted, computed } from 'vue';
-import { getClients,
-    getServices,
-    createAppointment
-} from '../../services/api.js';
+import { ref, computed, onMounted } from 'vue';
+import { useAppointments } from '../../composables/useAppointments.js';
+import { useClients } from '../../composables/useAppointments.js';
+import { useServices } from '../../composables/useAppointments.js';
+import { useFocusTrap } from '../../composables/useFocusTrap.js';
 
 export default {
-    emits: ['created'],
+    emits: ['created', 'cancel'],
     setup(_, {emit}) {
-        const clients = ref([]);
-        const services = ref([]);
+        const { clients } = useClients();
+        const { services } = useServices();
+        const { create, loading, error } = useAppointments();
 
         const clientId = ref('');
         const serviceId = ref('');
         const date = ref('');
         const time = ref('');
 
-        const loading = ref(false);
-        const error = ref(null);
-
-        onMounted(async () => {
-            try {
-                const [clientsData, servicesData] = await Promise.all([
-                    getClients(),
-                    getServices()
-                ]);
-
-                clients.value = clientsData;
-                services.value = servicesData;
-            } catch (err) {
-                error.value = 'Failed to load clients or services.';
-            }
+        const minDate = computed(() => {
+            const today = new Date();
+            return today.toISOString().split('T')[0];
         });
 
         const isValid = computed(() => {
-            return clientId.value && serviceId.value && date.value && time.vale
-        })
+            return clientId.value && serviceId.value && date.value && time.value
+        });
 
         async function submit() {
             if (!isValid.value) {
@@ -44,28 +33,43 @@ export default {
             }
 
             try {
-                loading.value = true;
-                error.value = null;
-
-                await createAppointment({
+                await create({
                     clientId: clientId.value,
                     serviceId: serviceId.value,
                     date: date.value,
                     time: time.value
                 });
+                
+                deactivateFocusTrap();
                 emit('created');
-
+                
                 clientId.value = '';
                 serviceId.value = '';
                 date.value = '';
                 time.value = '';
             } catch (err) {
-                error.value = 'Failed to create appointment.';
-            } finally {
-                loading.value = false;
+                console.error(err);
             }
         }
+
+        const { 
+            containerRef: formRef,
+            activateFocusTrap,
+            deactivateFocusTrap
+        } = useFocusTrap({
+            onEnter: (event, activeElement) => {
+                if (activeElement.tagName === 'INPUT' || activeElement.tagName === 'SELECT') {
+                    submit();
+                }
+            }
+        });
+
+        onMounted(() => {
+            activateFocusTrap();
+        });
+
         return {
+            formRef,
             clients,
             services,
             clientId,
@@ -75,54 +79,72 @@ export default {
             time,
             loading,
             error,
-            submit
-        }
+            submit,
+            minDate
         }
     }
+}
 </script>
 
 <template>
-    <form class="appointment-form" @submit.prevent="submit">
+    <form 
+        ref="formRef"
+        class="appointment-form" 
+        @submit.prevent="submit"
+        tabindex="-1"
+    >
         <h3>Create Appointment</h3>
-        <label>
-            Client
-            <select v-model="clientId">
-                <option value="">Select a client</option>
-                <option
-                v-for="client in clients"
-                :key="client.id"
-                :value="client.id" 
-                >
-                    {{ client.name }} - {{ client.id }}
-                </option>
-            </select>
-        </label>
 
-        <label>
-            Service
-            <select v-model="serviceId">
-                <option value="">Select a service</option>
-                <option
-                v-for="service in services"
-                :key="service.id" 
-                :value="service.id"
-                >
-                {{ service.name }}
-                </option>
-            </select>
-        </label>
+        <fieldset class="appointment-fieldset">
+            <legend>Client & Services</legend>
 
-        <label>
-            Date
-            <input type="date" v-model="date" />
-        </label>
+            <label>
+                Client
+                <select v-model="clientId">
+                    <option value="">Select a client</option>
+                    <option
+                    v-for="client in clients"
+                    :key="client.id"
+                    :value="client.id" 
+                    >
+                        {{ client.name }} - {{ client.id }}
+                    </option>
+                </select>
+            </label>
+    
+            <label>
+                Service
+                <select v-model="serviceId">
+                    <option value="">Select a service</option>
+                    <option
+                    v-for="service in services"
+                    :key="service.id" 
+                    :value="service.id"
+                    >
+                    {{ service.name }}
+                    </option>
+                </select>
+            </label>
+        </fieldset>
 
-        <label>
-            Time
-            <input type="time" v-model="time" />
-        </label>
+        <fieldset class="appointment-fieldset">
+            <legend>Date & Time</legend>
+            
+            <label>
+                Date
+                <input type="date" v-model="date" :min="minDate" />
+            </label>
+    
+            <label>
+                Time
+                <input type="time" v-model="time" />
+            </label>
+        </fieldset>
 
-        <button type="btn btn-primary" :disabled="!isValid || loading">
+
+        <button
+        type="submit" 
+        class="btn btn-primary" :disabled="!isValid || loading">
             {{ loading ? 'Creating...' : 'Create Appointment' }}
         </button>
 

@@ -1,7 +1,7 @@
 
 <script>
-    import { ref, onUnmounted, computed, onMounted } from 'vue';
-    import { getAppointments, getServices } from '../../services/api.js';
+    import { ref, watch, onMounted } from 'vue';
+    import { useServices, useAppointments } from '../../composables/useAppointments.js';
     import AppointmentItem from './AppointmentItem.vue';
     import { APPOINTMENT_STATUS } from '../../constants';
 
@@ -10,44 +10,20 @@
             AppointmentItem,
         },
         setup() {
-            const appointments = ref([]);
-            const services = ref([]);
             const statusFilter = ref('');
-            const error = ref(null);
-            let isMounted = true;
-
-            async function loadAppointments() {
-                error.value = null;
-                try {
-                    error.value = null;
-
-                    const [appointmentsData, servicesData] = await Promise.all([
-                        getAppointments(statusFilter.value),
-                        getServices()
-                    ]);
-
-                    appointments.value = appointmentsData;
-                    services.value = servicesData;
-
-                } catch (err) {
-                    error.value = 'Failed to load appointments.';
-                }
-            }
+            
+            const { appointments, loading, error, loadAppointments } = useAppointments(statusFilter);
+            const { servicesMap } = useServices();
 
             onMounted(loadAppointments);
 
-            const servicesMap = computed(() => {
-                const map = {};
-                for (const service of services.value) {
-                    map[service.id] = service.name
-                }
-                return map;
-            });
+            watch(statusFilter, loadAppointments);
 
             return {
                 appointments,
                 statusFilter,
                 servicesMap,
+                loading,
                 error,
                 loadAppointments,
                 APPOINTMENT_STATUS,
@@ -66,15 +42,21 @@
             <option :value="APPOINTMENT_STATUS.CANCELED">Canceled</option>
         </select>
 
-        <ul>
+        <TransitionGroup 
+        name="list"
+        tag="div"
+        class="appointments-list"
+        >
             <AppointmentItem
                 v-for="appointment in appointments"
                 :key="appointment.id"
                 :appointment="appointment"
-                :serviceName="servicesMap[appointment.serviceId]"
-                @refresh="loadAppointments"
+                :serviceName="servicesMap?.[appointment.serviceId] || 'Unknown service'"
+                @cancel="loadAppointments"
+                @attend="loadAppointments"
+                @reschedule="loadAppointments"
             />
-        </ul>
+        </TransitionGroup>
 
         <p v-if="error" style="color: red;">{{ error }}</p>
     </div>
