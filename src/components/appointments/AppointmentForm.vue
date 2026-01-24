@@ -57,6 +57,10 @@ export default {
             activateFocusTrap,
             deactivateFocusTrap
         } = useFocusTrap({
+            onEscape: () => {
+                deactivateFocusTrap();
+                emit('cancel');
+            },
             onEnter: (event, activeElement) => {
                 if (activeElement.tagName === 'INPUT' || activeElement.tagName === 'SELECT') {
                     submit();
