@@ -106,12 +106,8 @@ body {
 .view-header h1 {
     font-size: 1.75rem;
     font-weight: 700;
-    color: var(--color-gray-900);
+    color: var(--color-primary);
     margin: 0;
-    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
 }
 
 .app-main,
@@ -163,7 +159,7 @@ body {
 @media (max-width: 480px) {
     :root {
         font-size: 14px;
-        
+
     }
 
     .app-container {
